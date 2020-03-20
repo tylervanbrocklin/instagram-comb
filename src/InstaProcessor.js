@@ -4,6 +4,7 @@ import Row from "react-bootstrap/Row";
 import Col from "react-bootstrap/Col";
 import Button from "react-bootstrap/Button";
 import JSZip from 'jszip';
+import Promise from 'bluebird';
 
 class InstaProcessor extends React.Component {
     constructor(props) {
@@ -11,7 +12,7 @@ class InstaProcessor extends React.Component {
         this.state = {
             status: undefined,
             file: undefined,
-            images: undefined
+            images: []
         }
 
         this.locateImage = this.locateImage.bind(this);
@@ -30,27 +31,28 @@ class InstaProcessor extends React.Component {
     };
 
     locateImage = async(zip, path) => {
-        const photoH = await zip.files[path].async("base64").then((data) => {
-            return data;
-        });
-        return photoH;
+        return await zip.files[path].async("base64");
     };
 
-    handleFile = () => {
-        let file = document.getElementById('inputInstaData').files[0];
-        let newZip = new JSZip();
-        newZip.loadAsync(file)
+    handleFile = async () => {
+        const file = document.getElementById('inputInstaData').files[0];
+        const newZip = new JSZip();
+        await newZip.loadAsync(file)
             .then(async(zip) => {
-                const media = JSON.parse(await zip.files["media.json"].async("string").then(async(data) => await data)).photos;
-                let imageCaptions = await media.map(async(photo) => {
+                const media = JSON.parse(await zip.files["media.json"].async("string")).photos;
+                return Promise.map(media, async (photo) => {
                     return {
                         caption: photo.caption,
                         date: photo.taken_at,
-                        img: this.locateImage(zip, photo.path),
+                        img: await this.locateImage(zip, photo.path),
                         location: photo.location ? photo.location : undefined
                     };
                 });
-                console.log(imageCaptions);
+            })
+            .then((images) => {
+                this.setState({
+                    images
+                });
             })
             .catch((error) => {
                 console.log(error);
@@ -58,10 +60,8 @@ class InstaProcessor extends React.Component {
     };
 
     render() {
-        const images = this.state.images === undefined ? "" :
-            this.state.images.map(item => {
-                console.log(this.locateImage(item.img));
-                return <img src={"data:image/png;base64," + this.locateImage(item.img)} height="100" width="100"/>;
+        const images = this.state.images.map(item => {
+                return <img src={"data:image/png;base64," + item.img} height="100" width="100"/>;
             });
 
         return (
